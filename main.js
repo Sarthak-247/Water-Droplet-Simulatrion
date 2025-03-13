@@ -47,7 +47,7 @@ class WaterDroplet {
   constructor(position, size) {
     this.position = position;
     this.size = size;
-    this.velocity = new THREE.Vector2(0, -Math.random() * 2 - 1);
+    this.velocity = new THREE.Vector3(0, -Math.random() * 2 - 1, 0);
     
     const geometry = new THREE.SphereGeometry(size, 16, 16);
     const material = new THREE.MeshPhysicalMaterial({
@@ -64,13 +64,27 @@ class WaterDroplet {
   }
   
   update(deltaTime) {
-    this.position.y += this.velocity.y * deltaTime;
-    
+    this.position.addScaledVector(this.velocity, deltaTime);
     if (this.position.y < 0) {
       this.position.y = Math.random() * 10 + 10;
     }
-    
-    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+    this.mesh.position.copy(this.position);
+  }
+  
+  shatter(clickPoint) {
+    scene.remove(this.mesh);
+    for (let i = 0; i < 5; i++) {
+      const shardSize = this.size * (Math.random() * 0.5 + 0.5);
+      const shard = new WaterDroplet(this.position.clone(), shardSize);
+      const direction = new THREE.Vector3().subVectors(this.position, clickPoint).normalize();
+      shard.velocity.set(direction.x * (Math.random() * 2 + 1), direction.y * (Math.random() * 2 + 1), direction.z * (Math.random() * 2 + 1));
+      shard.velocity.set(
+        (Math.random() - 0.5) * 0.5, // Small horizontal variation
+        -Math.random() * 2 - 1, // Downward motion
+        (Math.random() - 0.5) * 0.5
+      );
+      droplets.push(shard);
+    }
   }
 }
 
@@ -90,6 +104,26 @@ for (let i = 0; i < 100; i++) createDroplet();
 // Toggle rain on click
 document.addEventListener('click', () => {
   raining = !raining;
+});
+
+// Shatter droplets on click
+document.addEventListener('pointerdown', (event) => {
+  const mouse = new THREE.Vector2(
+    (event.clientX / window.innerWidth) * 2 - 1,
+    -(event.clientY / window.innerHeight) * 2 + 1
+  );
+  
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  
+  const intersects = raycaster.intersectObjects(droplets.map(d => d.mesh));
+  if (intersects.length > 0) {
+    const clickedDroplet = droplets.find(d => d.mesh === intersects[0].object);
+    if (clickedDroplet) {
+      clickedDroplet.shatter(intersects[0].point);
+      droplets.splice(droplets.indexOf(clickedDroplet), 1);
+    }
+  }
 });
 
 // Animation loop
